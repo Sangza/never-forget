@@ -78,7 +78,7 @@ contract Trybe{
         trackAlbumMade[totalAlbumCreated].participant = participant;
 
         emit AlbumCreated(msg.sender, _name, totalAlbumCreated);
-        return "tryb";
+        return 'tybe${msg.sender}/${newAlbum.id}';
     }
 
     function joinAlbum(uint256 albumId) public {
