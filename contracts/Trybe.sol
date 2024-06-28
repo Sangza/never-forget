@@ -30,14 +30,19 @@ contract Trybe {
         uint256 created; // Timestamp when the memory was created
         address[] participants; // Wallet address of each participant
         uint256 totalNoOfImages; // Total number of images in the album
+        uint256 totalNoOfCollection; //Total number of Collections in the album
     }
 
     mapping(uint256 => Album) public album;
     mapping(uint256 => mapping(uint256 => Image)) public imagesInAlbum; // Map album ID to images
+    
 
     event AlbumCreated(address indexed creator, string nameOfAlbum, uint256 albumId);
     event JoinedAlbum(address indexed participant, uint256 timeJoined);
     event ImageAdded(uint256 albumId, uint256 imageId);
+    event Updated (uint256 albumId, uint256 imageId, string description);
+    event MovedImage (uint256 sourcealbum, uint256 destalbum, uint256 imageId);
+    event Deleted(uint256 albumId, uint256 imageId);
 
     constructor(uint _fee) {
         owner = msg.sender;
@@ -106,6 +111,18 @@ contract Trybe {
 
         emit JoinedAlbum(msg.sender, block.timestamp);
     }
+
+ function leaveAlbum(uint256 albumId) public {
+    require(albumId > 0 && albumId <= totalNoOfAlbumsCreated, "This album does not exist");
+    Album storage _album = album[albumId];
+    for (uint256 i = 0; i < _album.participants.length; i++) {
+        if (_album.participants[i] == msg.sender) {
+            delete _album.participants[i];
+            return;
+        }
+    }
+}
+
 
     function addImageToAlbum(
         uint256 albumId,
@@ -208,4 +225,152 @@ contract Trybe {
         require(albumId > 0 && albumId <= totalNoOfAlbumsCreated, "This album does not exist");
         return album[albumId].participants;
     }
+
+function updateImage(uint256 albumId, uint256 imageId,string memory _description) public{
+         require(albumId > 0 && albumId <= totalNoOfAlbumsCreated, "This album does not exist");
+        require(imageId > 0 && imageId <= album[albumId].totalNoOfImages, "This image does not exist");
+        Image storage _image = imagesInAlbum[albumId][imageId];
+        require(msg.sender == _image.owner, 'You can only update what you create');
+        _image.description = _description;
+
+        emit Updated(albumId, imageId, _description);
+    }
+
+function updateAlbum(uint256 albumId,string memory _description, uint8 _visibility,uint256 _fee,string memory _name, string memory _profileImage
+        ) public{
+        require(albumId > 0 && albumId <= totalNoOfAlbumsCreated, "This album does not exist");
+        Album storage _album = album[albumId];
+        require(msg.sender == _album.owner,"Please onlu owners can edit");
+        _album.name = _name;
+        _album.description = _description;
+        _album.visibility = _visibility;
+        _album.fee = _fee;
+        _album.profileImage = _profileImage;
+        _album.created = block.timestamp;
+
+emit Updated(albumId, _album.totalNoOfImages, _description);
+    }
+
+function addImagesToAlbumBatch(uint256 albumId,string[] memory urls,string[] memory descriptions) public {
+        require(albumId > 0 && albumId <= totalNoOfAlbumsCreated, "This album does not exist");
+        require(urls.length == descriptions.length, "URLs and descriptions arrays must have the same length");
+
+        Album storage _album = album[albumId];
+
+        bool isParticipant = false;
+        for (uint256 i = 0; i < _album.participants.length; i++) {
+            if (_album.participants[i] == msg.sender) {
+                isParticipant = true;
+                break;
+            }
+        }
+        require(isParticipant, "Only those who have joined the album can add images.");
+
+        for (uint256 i = 0; i < urls.length; i++) {
+            _album.totalNoOfImages++;
+            imagesInAlbum[albumId][_album.totalNoOfImages] = Image({
+                owner: msg.sender,
+                id: _album.totalNoOfImages,
+                url: urls[i],
+                description: descriptions[i]
+            });
+            emit ImageAdded(albumId, _album.totalNoOfImages);
+        }
+    }
+
+    function moveImageFromAlbumToAnother(uint256 albumId1,uint256 albumId2,uint256 imageId) public {
+        require(album[albumId1].id != 0, "Source album does not exist");
+        require(album[albumId2].id != 0, "Destination album does not exist");
+
+        Album storage sourceAlbum = album[albumId1];
+        Album storage destAlbum = album[albumId2];
+
+        bool isParticipantInSource = false;
+        bool isParticipantInDest = false;
+
+        for (uint256 i = 0; i < sourceAlbum.participants.length; i++) {
+            if (sourceAlbum.participants[i] == msg.sender) {
+                isParticipantInSource = true;
+                break;
+            }
+        }
+        require(isParticipantInSource, "Only those who have joined the source album can move an image.");
+
+        for (uint256 i = 0; i < destAlbum.participants.length; i++) {
+            if (destAlbum.participants[i] == msg.sender) {
+                isParticipantInDest = true;
+                break;
+            }
+        }
+        require(isParticipantInDest, "Only those who have joined the destination album can move an image.");
+        require(imagesInAlbum[albumId1][imageId].id != 0, "Image does not exist in the source album");
+
+        Image memory transferImage = imagesInAlbum[albumId1][imageId];
+        destAlbum.totalNoOfImages++;
+        imagesInAlbum[albumId2][destAlbum.totalNoOfImages] = transferImage;
+        delete imagesInAlbum[albumId1][imageId];
+
+        emit MovedImage(albumId1, albumId2, imageId);
+    }
+
+    function transferImageFromAlbumToAnother(uint256 albumId1,uint256 albumId2,uint256 imageId) public {
+        require(album[albumId1].id != 0, "Source album does not exist");
+        require(album[albumId2].id != 0, "Destination album does not exist");
+
+        Album storage sourceAlbum = album[albumId1];
+        Album storage destAlbum = album[albumId2];
+
+        bool isParticipantInSource = false;
+        bool isParticipantInDest = false;
+
+        for (uint256 i = 0; i < sourceAlbum.participants.length; i++) {
+            if (sourceAlbum.participants[i] == msg.sender) {
+                isParticipantInSource = true;
+                break;
+            }
+        }
+        require(isParticipantInSource, "Only those who have joined the source album can move an image.");
+
+        for (uint256 i = 0; i < destAlbum.participants.length; i++) {
+            if (destAlbum.participants[i] == msg.sender) {
+                isParticipantInDest = true;
+                break;
+            }
+        }
+        require(isParticipantInDest, "Only those who have joined the destination album can move an image.");
+        require(imagesInAlbum[albumId1][imageId].id != 0, "Image does not exist in the source album");
+
+        Image memory transferImage = imagesInAlbum[albumId1][imageId];
+        destAlbum.totalNoOfImages++;
+        imagesInAlbum[albumId2][destAlbum.totalNoOfImages] = transferImage;
+
+        emit MovedImage(albumId1, albumId2, imageId);
+    }
+
+    function deleteAlbum(uint256 albumId) public {
+        require(albumId > 0 && albumId <= totalNoOfAlbumsCreated, "This album does not exist");
+       Album memory _album = album[albumId];
+       require(msg.sender == _album.owner,"Only owners can delete");
+       totalNoOfAlbumsCreated--;
+       delete _album;
+    }
+
+    function deleteImagefromAlbum(uint256 albumId, uint256 imageId) public {
+        require(albumId > 0 && albumId <= totalNoOfAlbumsCreated, "This album does not exist");
+        require(imageId > 0 && imageId <= album[albumId].totalNoOfImages, "This image does not exist");
+        Album memory _album = album[albumId];
+        bool isParticipant = false;
+        for (uint256 i = 0; i < _album.participants.length; i++) {
+            if (_album.participants[i] == msg.sender) {
+                isParticipant = true;
+                break;
+             }
+         }
+        require(isParticipant,"Only those who have joined the album can delete an image.");
+        delete imagesInAlbum[albumId][imageId];
+        _album.totalNoOfImages--;
+        emit Deleted(albumId, imageId);
+    }
+
+
 }
